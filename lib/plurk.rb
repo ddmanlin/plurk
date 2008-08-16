@@ -2,7 +2,7 @@ require "net/http"
 require "cgi"
 
 class Plurk
-  attr_reader :logged_in, :uid, :nickname, :friends, :cookie
+  attr_reader :logged_in, :uid, :nickname, :friends, :cookie, :plurk_qualifiers
   def initialize
     @plurk_paths = {
       :http_base            => "www.plurk.com",
@@ -25,6 +25,28 @@ class Plurk
       :friends_get_blocked  => "/Friends/getBlockedByOffset",
       :user_get_info        => "/Users/fetchUserInfo"
     }
+
+    @plurk_qualifiers = {
+      :loves   => "loves",
+      :likes   => "likes",
+      :shares  => "shares",
+      :gives   => "gives",
+      :hates   => "hates",
+      :wants   => "wants",
+      :wishes  => "wishes",
+      :needs   => "needs",
+      :will    => "will",
+      :hopes   => "hopes",
+      :asks    => "asks",
+      :has     => "has",
+      :was     => "was",
+      :wonders => "wonders",
+      :feels   => "feels",
+      :thinks  => "thinks",
+      :says    => "says",
+      :is      => "is",
+
+    }
   end
 
   def login(nickname, password)
@@ -43,7 +65,7 @@ class Plurk
     @logged_in = true
   end
 
-  def add_plurk(content="", qualifier="says", limited_to=[], no_comments=false, lang="en")
+  def add_plurk(content="", qualifier=@plurk_qualifier[:says], limited_to=[], no_comments=false, lang="en")
     if @logged_in
       http = Net::HTTP.start(@plurk_paths[:http_base])
       no_comments = no_comments ? 1 : 0
@@ -143,15 +165,17 @@ class Plurk
   end
 
   def uid_to_nickname(uid)
-    nickname ||= -1
-    if uid == @uid
-      nickname = @nickname
-    else
-      for friend in @friends
-        nickname = friend[1]["nick_name"] if uid.to_s == friend[0]
+    if @logged_in
+      nickname ||= -1
+      if uid == @uid
+        nickname = @nickname
+      else
+        for friend in @friends
+          nickname = friend[1]["nick_name"] if uid.to_s == friend[0]
+        end
       end
+      return nickname
     end
-    return nickname
     # if uid = @uid return @nickname
     # if uid = friends.@uid, return friends.@nickname
     # return Unknown User uid
@@ -177,7 +201,8 @@ class Plurk
   def nickname_to_uid(nickname)
     http = Net::HTTP.start(@plurk_paths[:http_base])
     resp = http.request_get("/user/#{nickname}")
-    /var GLOBAL = \{.*"uid": ([0-9]+),.*\}/imu =~resp.body    
+    /var GLOBAL = \{.*"uid": ([0-9]+),.*\}/imu =~resp.body
+    uid = Regexp.last_match[1]
     unless uid
       return -1
     else
@@ -189,13 +214,15 @@ class Plurk
   end
 
   def uid_to_userinfo(uid)
-    http = Net::HTTP.start(@plurk_paths[:http_base])
-    params = { "user_id" => uid }
-    resp = http.request_get(@plurk_paths[:user_get_info]+"?"+hash_to_querystring(params),{"Cookie" => @cookie})
-    if resp.code == "500"
-      return []
-    else
-      return resp.body
+    if @logged_in
+      http = Net::HTTP.start(@plurk_paths[:http_base])
+      params = { "user_id" => uid }
+      resp = http.request_get(@plurk_paths[:user_get_info]+"?"+hash_to_querystring(params),{"Cookie" => @cookie})
+      if resp.code == "500"
+        return {}
+      else
+        return resp.body
+      end
     end
     # array_profile = get [:user_get_info] ? user_id=uid
     # if respond code = 500 return []
@@ -238,6 +265,13 @@ if __FILE__ == $0
   else
     plurker = Plurk.new
     puts "Login: " + plurker.login(ARGV.shift, ARGV.shift).inspect
-    puts "Sent: " + plurker.add_plurk("testing Plurk API http://tinyurl.com/6r4nfv", "is").inspect
+    puts "Sent: " + plurker.add_plurk("testing Plurk API http://tinyurl.com/6r4nfv", plurker.plurk_qualifiers[:is]).inspect
+    puts "uid to nickname: " + plurker.uid_to_nickname(plurker.uid).inspect #user
+    puts "uid to nickname: " + plurker.uid_to_nickname(plurker.friends.keys[0]).inspect #1st friend
+    puts "get response: " + plurker.get_responses(4183588).inspect #response of http://www.plurk.com/p/2ho2s
+    puts "nickname to uid: " + plurker.nickname_to_uid(plurker.nickname).inspect
+    puts "uid to info: " + plurker.uid_to_userinfo(plurker.uid).inspect
+    puts "plurk_id to permalink: " + plurker.get_permalink(4183588).inspect #should be http://www.plurk.com/p/2ho2s
+    puts "permalink to plurk_id: " + plurker.permalink_to_plurk_id("http://www.plurk.com/p/2ho2s").inspect #should be 4183588
   end
 end
