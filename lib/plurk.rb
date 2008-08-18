@@ -1,5 +1,6 @@
 require "net/http"
 require "cgi"
+require "uri"
 
 class Plurk
   attr_reader :logged_in, :uid, :nickname, :friends, :cookie, :plurk_qualifiers
@@ -23,7 +24,7 @@ class Plurk
       :friends_block        => "/Friends/blockUser",
       :friends_remove_block => "/Friends/removeBlock",
       :friends_get_blocked  => "/Friends/getBlockedByOffset",
-      :user_get_info        => "/Users/fetchUserInfo"
+      :user_get_info        => "/Users/fetchUserInfo",
     }
 
     @plurk_qualifiers = {
@@ -45,7 +46,30 @@ class Plurk
       :thinks  => "thinks",
       :says    => "says",
       :is      => "is",
+    }
 
+    @plurk_languages = {
+      :en      => "en",
+      :ar      => "ar",
+      :ca      => "ca",
+      :cs      => "cs",
+      :da      => "da",
+      :de      => "de",
+      :el      => "el",
+      :es      => "es",
+      :fil     => "fil",
+      :fr      => "fr",
+      :hu      => "hu",
+      :id      => "id",
+      :it      => "it",
+      :nb      => "nb",
+      :nl      => "nl",
+      :pl      => "pl",
+      :pt_BR   => "pt_BR",
+      :ro      => "ro",
+      :ru      => "ru",
+      :zh_CN   => "zh_CN",
+      :zh_Hant => "zh_Hant",
     }
   end
 
@@ -65,7 +89,8 @@ class Plurk
     @logged_in = true
   end
 
-  def add_plurk(content="", qualifier=@plurk_qualifier[:says], limited_to=[], no_comments=false, lang="en")
+  #it would be nice if we can return the plurk_id of this new plurk - ddmanlin
+  def add_plurk(content="", qualifier=@plurk_qualifier[:says], limited_to=[], no_comments=false, lang=@plurk_languages[:en])
     if @logged_in
       http = Net::HTTP.start(@plurk_paths[:http_base])
       no_comments = no_comments ? 1 : 0
@@ -140,6 +165,22 @@ class Plurk
   end
 
   def delete_plurk(plurk_id)
+    if @logged_in
+
+      #first make sure the plurk exists
+      resp = Net::HTTP.get_response(URI.parse(get_permalink(plurk_id)))
+      return false if resp.code == "404" #make sure it exists
+
+      #delete the existing plurk
+      http = Net::HTTP.start(@plurk_paths[:http_base])
+      params = {
+                 "plurk_id" => plurk_id
+               }
+      resp, data = http.request_post(@plurk_paths[:plurk_delete],
+                   hash_to_querystring(params),{"Cookie" => @cookie})
+
+      return resp.body ? true : false
+    end
     # if not login return false
     # post [:plurk_delete] ? plurk_id=plurk_id
     # if response.body ok, return true else false
@@ -181,7 +222,25 @@ class Plurk
     # return Unknown User uid
   end
 
-  def respond_to_plurk(plurk_id, lang, qualifier, content)
+  #not working by  ddmanlin
+  def respond_to_plurk(plurk_id, content="", qualifier=@plurk_qualifier[:says], lang=@plurk_languages[:en])
+#    if @logged_in
+#      http = Net::HTTP.start(@plurk_paths[:http_base])
+#      params = {
+#                 "plurk_id" => plurk_id,
+#                 "uid" => @uid,
+#                 "pid" => @uid,
+#                 "lang" => lang,
+#                 "content" => content[0...140],
+#                 "qualifier" => qualifier,
+#                 "posted" => Time.now.getgm.strftime("%Y-%m-%dT%H:%M:%S"),
+#               }
+#      resp, data = http.request_post(@plurk_paths[:plurk_respond],
+#                   hash_to_querystring(params),{"Cookie" => @cookie})
+#      p resp
+#      p data
+#      content
+#    end
     # if not log in return false
     # post [:plurk_respond] ? plurk_id=plurk_id & uid=@uid & p_uid=@uid & lang=lang & content=content[0:140]
     # qualifier=qualifier & posted = Time.now
@@ -265,13 +324,15 @@ if __FILE__ == $0
   else
     plurker = Plurk.new
     puts "Login: " + plurker.login(ARGV.shift, ARGV.shift).inspect
-    puts "Sent: " + plurker.add_plurk("testing Plurk API http://tinyurl.com/6r4nfv", plurker.plurk_qualifiers[:is]).inspect
-    puts "uid to nickname: " + plurker.uid_to_nickname(plurker.uid).inspect #user
-    puts "uid to nickname: " + plurker.uid_to_nickname(plurker.friends.keys[0]).inspect #1st friend
-    puts "get response: " + plurker.get_responses(4183588).inspect #response of http://www.plurk.com/p/2ho2s
-    puts "nickname to uid: " + plurker.nickname_to_uid(plurker.nickname).inspect
-    puts "uid to info: " + plurker.uid_to_userinfo(plurker.uid).inspect
-    puts "plurk_id to permalink: " + plurker.get_permalink(4183588).inspect #should be http://www.plurk.com/p/2ho2s
-    puts "permalink to plurk_id: " + plurker.permalink_to_plurk_id("http://www.plurk.com/p/2ho2s").inspect #should be 4183588
+#    puts "Sent: " + plurker.add_plurk("testing Plurk API http://tinyurl.com/6r4nfv", plurker.plurk_qualifiers[:is]).inspect
+#    puts "uid to nickname: " + plurker.uid_to_nickname(plurker.uid).inspect #user
+#    puts "uid to nickname: " + plurker.uid_to_nickname(plurker.friends.keys[0]).inspect #1st friend
+#    puts "delete plurk: " + plurker.delete_plurk(plurker.permalink_to_plurk_id("http://www.plurk.com/p/2o8jc")).inspect
+#    puts "response: " + plurker.respond_to_plurk(4183588, "test response", "is").inspect
+#    puts "get response: " + plurker.get_responses(4183588).inspect #response of http://www.plurk.com/p/2ho2s
+#    puts "nickname to uid: " + plurker.nickname_to_uid(plurker.nickname).inspect
+#    puts "uid to info: " + plurker.uid_to_userinfo(plurker.uid).inspect
+#    puts "plurk_id to permalink: " + plurker.get_permalink(4183588).inspect #should be http://www.plurk.com/p/2ho2s
+#    puts "permalink to plurk_id: " + plurker.permalink_to_plurk_id("http://www.plurk.com/p/2ho2s").inspect #should be 4183588
   end
 end
